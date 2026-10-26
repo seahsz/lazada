@@ -9,21 +9,23 @@ from dataclasses import dataclass, field
 from enum import Enum
 from urllib.parse import urlsplit
 
-# Runs inside the page. Returns a small summary instead of the ~90KB module JSON.
+# Runs inside the page. Checks all URLs concurrently and returns one small summary per
+# URL instead of the ~90KB module JSON. Lazada's page enables mtop's syncCookieMode,
+# which keeps concurrent requests correctly signed.
 STOCK_CHECK_JS = """
-async ({url, timeoutMs}) => {
+async ({urls, timeoutMs}) => {
   if (!window.Mtop || !window.Mtop.default || !window.Mtop.default.request) {
-    return {kind: 'no_mtop'};
+    return urls.map(() => ({kind: 'no_mtop'}));
   }
-  const u = new URL(url);
-  const m = u.pathname.match(/\\/([\\w-]+)\\.html/);
-  const uri = m ? m[1] : '';
   const cookieParams = {};
   for (const item of document.cookie.split('; ')) {
     const i = item.indexOf('=');
     if (i > 0) cookieParams[item.slice(0, i)] = item.slice(i + 1);
   }
-  return await new Promise((resolve) => {
+  const checkOne = (url) => new Promise((resolve) => {
+    const u = new URL(url);
+    const m = u.pathname.match(/\\/([\\w-]+)\\.html/);
+    const uri = m ? m[1] : '';
     const timer = setTimeout(() => resolve({kind: 'timeout'}), timeoutMs);
     const done = (r) => { clearTimeout(timer); resolve(r); };
     window.Mtop.default.request({
@@ -60,6 +62,7 @@ async ({url, timeoutMs}) => {
       });
     }, (err) => done({kind: 'mtop_error', ret: err && err.ret}));
   });
+  return await Promise.all(urls.map(checkOne));
 }
 """
 
@@ -117,9 +120,10 @@ def classify(raw: dict) -> StockResult:
     )
 
 
-def check_stock(page, product_url: str, timeout_ms: int = 10_000) -> StockResult:
+def check_stock(page, product_urls: list[str], timeout_ms: int = 5_000) -> list[StockResult]:
+    """Check every URL in parallel; results come back in the same order."""
     try:
-        raw = page.evaluate(STOCK_CHECK_JS, {"url": product_url, "timeoutMs": timeout_ms})
+        raws = page.evaluate(STOCK_CHECK_JS, {"urls": product_urls, "timeoutMs": timeout_ms})
     except Exception as e:  # page navigated, crashed, etc.
-        return StockResult(Status.ERROR, detail=f"evaluate failed: {e}")
-    return classify(raw)
+        return [StockResult(Status.ERROR, detail=f"evaluate failed: {e}") for _ in product_urls]
+    return [classify(raw) for raw in raws]

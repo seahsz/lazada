@@ -1,4 +1,4 @@
-from bot.stock import Status, canonical_product_url, classify
+from bot.stock import Status, canonical_product_url, check_stock, classify
 
 # Modelled on live getDetailInfo results for the two products (Oct 2026).
 IN_STOCK = {
@@ -49,6 +49,29 @@ def test_anti_bot_codes_are_blocked():
 def test_missing_mtop_and_errors():
     assert classify({"kind": "no_mtop"}).status is Status.NO_API
     assert classify({"kind": "timeout"}).status is Status.ERROR
+
+
+class FakePage:
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.args = result, error, None
+
+    def evaluate(self, _js, args):
+        self.args = args
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_check_stock_batches_in_order():
+    page = FakePage([OUT_OF_STOCK, IN_STOCK])
+    results = check_stock(page, ["a", "b"])
+    assert page.args["urls"] == ["a", "b"]
+    assert [r.status for r in results] == [Status.OUT_OF_STOCK, Status.IN_STOCK]
+
+
+def test_check_stock_evaluate_failure_errors_every_product():
+    results = check_stock(FakePage(error=RuntimeError("navigated")), ["a", "b"])
+    assert [r.status for r in results] == [Status.ERROR, Status.ERROR]
 
 
 def test_canonical_url_drops_query():

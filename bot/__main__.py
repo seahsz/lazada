@@ -24,6 +24,8 @@ log = logging.getLogger("bot")
 
 MAX_CONSECUTIVE_ERRORS = 3
 BLOCKED_BACKOFF_S = 60
+MIN_SLEEP_S = 0.5
+STATUS_EVERY_S = 60
 
 
 def setup_logging() -> None:
@@ -66,13 +68,15 @@ class Bot:
         open_poll_tab(self.poll_page, self.targets[0][1])
 
     def check_once(self) -> None:
-        for product, url in self.targets:
-            log.info(describe(product, check_stock(self.poll_page, url)))
-            self._product_gap()
+        results = check_stock(self.poll_page, [url for _, url in self.targets])
+        for (product, _), result in zip(self.targets, results):
+            log.info(describe(product, result))
 
     def run(self, ignore_schedule: bool) -> None:
         pending = list(self.targets)
         errors = 0
+        rounds = 0
+        last_status = 0.0
         was_idle = False
 
         while pending:
@@ -85,31 +89,42 @@ class Bot:
                 self.refresh_poll_tab()
                 was_idle = False
 
-            for product, url in list(pending):
-                result = check_stock(self.poll_page, url)
-                log.info(describe(product, result))
+            # Every pending product in one parallel batch.
+            results = check_stock(self.poll_page, [url for _, url in pending])
+            rounds += 1
+            statuses = {r.status for r in results}
 
-                if result.status is Status.BLOCKED:
-                    self._handle_block()
-                    break
-                if result.status in (Status.ERROR, Status.NO_API):
-                    errors += 1
-                    if errors >= MAX_CONSECUTIVE_ERRORS:
-                        log.warning("Repeated errors - reloading poll tab")
-                        self._safe_refresh()
-                        errors = 0
-                    continue
+            if Status.BLOCKED in statuses:
+                log.warning(" | ".join(describe(p, r) for (p, _), r in zip(pending, results)))
+                self._handle_block()
+                continue
+
+            if statuses & {Status.ERROR, Status.NO_API}:
+                log.warning(" | ".join(describe(p, r) for (p, _), r in zip(pending, results)))
+                errors += 1
+                if errors >= MAX_CONSECUTIVE_ERRORS:
+                    log.warning("Repeated errors - reloading poll tab")
+                    self._safe_refresh()
+                    errors = 0
+            else:
                 errors = 0
 
-                if result.status is Status.IN_STOCK:
-                    self.alerter.alert("IN STOCK", f"{product.name} - buying now", urgent=True)
-                    if self._buy(product, url, result):
-                        pending.remove((product, url))
-                self._product_gap()
+            in_stock = [(p, url, r) for (p, url), r in zip(pending, results) if r.status is Status.IN_STOCK]
+            for product, url, result in in_stock:
+                log.info(describe(product, result))
+                self.alerter.alert("IN STOCK", f"{product.name} - buying now", urgent=True)
+                if self._buy(product, url, result):
+                    pending.remove((product, url))
 
-            if pending:
+            # One status line a minute instead of a log line per check.
+            if time.monotonic() - last_status >= STATUS_EVERY_S:
+                last_status = time.monotonic()
+                log.info("Round %d: %s", rounds,
+                         " | ".join(f"{p.name}={r.status.value}" for (p, _), r in zip(pending, results)))
+
+            if pending and not in_stock:
                 p = self.cfg.polling
-                time.sleep(max(1.0, p.interval_seconds + random.uniform(-p.jitter_seconds, p.jitter_seconds)))
+                time.sleep(max(MIN_SLEEP_S, p.interval_seconds + random.uniform(-p.jitter_seconds, p.jitter_seconds)))
 
         self.alerter.alert("DONE", "Every product has been bought.")
 
@@ -149,10 +164,6 @@ class Bot:
         wait = (nxt - now).total_seconds() if nxt else 60
         time.sleep(max(1.0, min(60.0, wait)))
         return True
-
-    def _product_gap(self) -> None:
-        lo, hi = self.cfg.polling.product_gap_seconds
-        time.sleep(random.uniform(lo, hi))
 
 
 def main() -> None:

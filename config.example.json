@@ -17,9 +17,8 @@
     { "days": ["fri"], "start": "10:00", "end": "11:00" }
   ],
   "polling": {
-    "interval_seconds": 4,
-    "jitter_seconds": 2,
-    "product_gap_seconds": [0.3, 1.2]
+    "interval_seconds": 1.5,
+    "jitter_seconds": 0.5
   },
   "browser": {
     "channel": "chrome",

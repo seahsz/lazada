@@ -15,9 +15,8 @@ class Product:
 
 @dataclass
 class Polling:
-    interval_seconds: float = 4.0
-    jitter_seconds: float = 2.0
-    product_gap_seconds: tuple[float, float] = (0.3, 1.2)
+    interval_seconds: float = 1.5
+    jitter_seconds: float = 0.5
 
 
 @dataclass
@@ -65,14 +64,12 @@ def parse_config(raw: dict) -> Config:
         raise ValueError("No monitoring windows configured.")
 
     polling_raw = raw.get("polling", {})
-    gap = polling_raw.get("product_gap_seconds", [0.3, 1.2])
     polling = Polling(
-        interval_seconds=float(polling_raw.get("interval_seconds", 4)),
-        jitter_seconds=float(polling_raw.get("jitter_seconds", 2)),
-        product_gap_seconds=(float(gap[0]), float(gap[1])),
+        interval_seconds=float(polling_raw.get("interval_seconds", 1.5)),
+        jitter_seconds=float(polling_raw.get("jitter_seconds", 0.5)),
     )
-    if polling.interval_seconds < 1:
-        raise ValueError("polling.interval_seconds must be at least 1")
+    if polling.interval_seconds < 0.5:
+        raise ValueError("polling.interval_seconds must be at least 0.5")
 
     browser_raw = raw.get("browser", {})
     browser = BrowserSettings(
