@@ -1,0 +1,22 @@
+# Browser profile: holds your logged-in Lazada session. Never commit.
+profile/
+browser_data*/
+
+# Your real config (product list, ntfy topic). Commit config.example.json instead.
+config.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+out/
+
+# Logs
+logs/
+*.log

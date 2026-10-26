@@ -1,0 +1,36 @@
+{
+  "products": [
+    {
+      "name": "30th Celebration PC ETB",
+      "url": "https://s.lazada.sg/s.TkVZb?c=w",
+      "quantity": 2
+    },
+    {
+      "name": "Chaos Rising PC ETB",
+      "url": "https://www.lazada.sg/products/i13718947810-s124660484148.html",
+      "quantity": 2
+    }
+  ],
+  "timezone": "Asia/Singapore",
+  "windows": [
+    { "days": ["mon", "tue", "wed", "thu", "fri"], "start": "13:00", "end": "15:00" },
+    { "days": ["fri"], "start": "10:00", "end": "11:00" }
+  ],
+  "polling": {
+    "interval_seconds": 4,
+    "jitter_seconds": 2,
+    "product_gap_seconds": [0.3, 1.2]
+  },
+  "browser": {
+    "channel": "chrome",
+    "profile_dir": "./profile",
+    "cdp_url": null
+  },
+  "purchase": {
+    "auto_place_order": true
+  },
+  "alerts": {
+    "sound": true,
+    "ntfy_topic": null
+  }
+}
